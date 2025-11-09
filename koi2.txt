@@ -1,0 +1,891 @@
+        local Config = {
+    -- Target Line Settings
+    FOVCircle = true,
+    ShowTargetLine = true,
+    FOVSize = 80,
+    SilentAimDistance = 500,
+    IgnorePlayers = {},
+    TargetPart = "Head",
+    LineColor = Color3.fromRGB(255, 0, 0),
+    LineThickness = 2,
+    
+    -- Silent Aim Settings
+    SilentAimEnabled = true,
+    SilentAimHitChance = 100,
+    SilentAimKeybind = "Q",
+    
+    -- Movement Settings
+    WalkSpeedEnabled = false,
+    WalkSpeed = 16,
+    OriginalWalkSpeed = 16,
+    JumpPowerEnabled = false,
+    JumpPower = 50,
+    OriginalJumpPower = 50,
+    FlyEnabled = false,
+    FlySpeed = 50,
+    NoclipEnabled = false,
+    
+    -- Visual Settings
+    ESPEnabled = false,
+    ShowBoxESP = true,
+    ShowTracer = true,
+    ShowName = true,
+    ShowDistance = true,
+    
+    -- Utility Settings
+    AutoClickerEnabled = false,
+    ClickSpeed = 10,
+    InfiniteJump = false,
+    
+    -- GUI Settings
+    GUIVisible = true
+}
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local Mouse = LocalPlayer:GetMouse()
+
+-- Global Variables
+local GUI, fovCircle, targetLine
+local connections = {}
+local espFolders = {}
+local silentAimHook
+local flyBodyVelocity
+local noclipConnection
+local autoClickerConnection
+
+-- =============================================
+-- GUI CREATION FUNCTIONS
+-- =============================================
+
+function createGUI()
+    -- Create ScreenGui
+    GUI = Instance.new("ScreenGui")
+    GUI.Name = "AllInOneGUI"
+    GUI.Parent = game.CoreGui
+    
+    -- Main Frame
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
+    mainFrame.Size = UDim2.new(0, 350, 0, 550)
+    mainFrame.Position = UDim2.new(0, 10, 0, 10)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = GUI
+    
+    -- Title Bar
+    local titleBar = Instance.new("Frame")
+    titleBar.Name = "TitleBar"
+    titleBar.Size = UDim2.new(1, 0, 0, 40)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    titleBar.Parent = mainFrame
+    
+    local title = Instance.new("TextLabel")
+    title.Name = "Title"
+    title.Size = UDim2.new(0.7, 0, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
+    title.BackgroundTransparency = 1
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Text = "All-in-One Script"
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = titleBar
+    
+    -- Close/Minimize Button
+    local closeBtn = Instance.new("TextButton")
+    closeBtn.Name = "CloseBtn"
+    closeBtn.Size = UDim2.new(0, 30, 0, 30)
+    closeBtn.Position = UDim2.new(1, -35, 0, 5)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+    closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeBtn.Text = "−"
+    closeBtn.TextScaled = true
+    closeBtn.Parent = titleBar
+    
+    closeBtn.MouseButton1Click:Connect(function()
+        Config.GUIVisible = not Config.GUIVisible
+        GUI.Enabled = Config.GUIVisible
+    end)
+    
+    -- Tabs Container
+    local tabsContainer = Instance.new("Frame")
+    tabsContainer.Name = "TabsContainer"
+    tabsContainer.Size = UDim2.new(1, 0, 0, 40)
+    tabsContainer.Position = UDim2.new(0, 0, 0, 40)
+    tabsContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    tabsContainer.Parent = mainFrame
+    
+    -- Content Frame
+    local contentFrame = Instance.new("ScrollingFrame")
+    contentFrame.Name = "ContentFrame"
+    contentFrame.Size = UDim2.new(1, -20, 1, -90)
+    contentFrame.Position = UDim2.new(0, 10, 0, 85)
+    contentFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    contentFrame.BorderSizePixel = 0
+    contentFrame.ScrollBarThickness = 5
+    contentFrame.Parent = mainFrame
+    
+    -- Create Tabs
+    local tabs = {
+        {"Aim", createAimTab},
+        {"Visual", createVisualTab},
+        {"Movement", createMovementTab},
+        {"Utility", createUtilityTab}
+    }
+    
+    local currentTab = tabs[1][1]
+    local tabButtons = {}
+    
+    for i, tabData in ipairs(tabs) do
+        local tabName, tabFunction = tabData[1], tabData[2]
+        
+        local tabButton = Instance.new("TextButton")
+        tabButton.Name = tabName .. "Tab"
+        tabButton.Size = UDim2.new(1 / #tabs, 0, 1, 0)
+        tabButton.Position = UDim2.new((i-1) / #tabs, 0, 0, 0)
+        tabButton.BackgroundColor3 = i == 1 and Color3.fromRGB(60, 60, 80) or Color3.fromRGB(45, 45, 55)
+        tabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tabButton.Text = tabName
+        tabButton.TextScaled = true
+        tabButton.Parent = tabsContainer
+        
+        tabButton.MouseButton1Click:Connect(function()
+            currentTab = tabName
+            for _, btn in pairs(tabButtons) do
+                btn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+            end
+            tabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+            updateTabContent(tabFunction)
+        end)
+        
+        table.insert(tabButtons, tabButton)
+    end
+    
+    -- Status Bar
+    local statusBar = Instance.new("Frame")
+    statusBar.Name = "StatusBar"
+    statusBar.Size = UDim2.new(1, 0, 0, 25)
+    statusBar.Position = UDim2.new(0, 0, 1, -25)
+    statusBar.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    statusBar.Parent = mainFrame
+    
+    local statusText = Instance.new("TextLabel")
+    statusText.Name = "StatusText"
+    statusText.Size = UDim2.new(1, -10, 1, 0)
+    statusText.Position = UDim2.new(0, 5, 0, 0)
+    statusText.BackgroundTransparency = 1
+    statusText.TextColor3 = Color3.fromRGB(0, 255, 0)
+    statusText.Text = "Ready - FPS: 60"
+    statusText.TextXAlignment = Enum.TextXAlignment.Left
+    statusText.TextScaled = true
+    statusText.Font = Enum.Font.Gotham
+    statusText.Parent = statusBar
+    
+    -- Initialize first tab
+    updateTabContent(tabs[1][2])
+    
+    return GUI
+end
+
+function updateTabContent(tabFunction)
+    local contentFrame = GUI:FindFirstChild("MainFrame"):FindFirstChild("ContentFrame")
+    contentFrame:ClearAllChildren()
+    contentFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    tabFunction(contentFrame)
+end
+
+function createAimTab(parent)
+    local yPos = 0
+    
+    createSection(parent, "Target Line Settings", yPos)
+    yPos = yPos + 40
+    
+    createToggle(parent, "FOV Circle", yPos, function(value)
+        Config.FOVCircle = value
+        updateFOVCircle()
+    end, Config.FOVCircle)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Show Target Line", yPos, function(value)
+        Config.ShowTargetLine = value
+        updateTargetLine()
+    end, Config.ShowTargetLine)
+    yPos = yPos + 45
+    
+    createSlider(parent, "FOV Size", yPos, 20, 300, function(value)
+        Config.FOVSize = value
+        updateFOVCircle()
+    end, Config.FOVSize)
+    yPos = yPos + 65
+    
+    createSlider(parent, "Aim Distance", yPos, 50, 1000, function(value)
+        Config.SilentAimDistance = value
+    end, Config.SilentAimDistance)
+    yPos = yPos + 65
+    
+    createInput(parent, "Ignore Players", yPos, function(text)
+        updateIgnoreList(text)
+    end)
+    yPos = yPos + 65
+    
+    createDropdown(parent, "Target Part", yPos, {"Head", "HumanoidRootPart", "Torso", "LeftHand", "RightHand"}, function(selection)
+        Config.TargetPart = selection
+    end, Config.TargetPart)
+    yPos = yPos + 65
+    
+    createSection(parent, "Silent Aim Settings", yPos)
+    yPos = yPos + 40
+    
+    createToggle(parent, "Silent Aim", yPos, function(value)
+        Config.SilentAimEnabled = value
+        toggleSilentAim(value)
+    end, Config.SilentAimEnabled)
+    yPos = yPos + 45
+    
+    createSlider(parent, "Hit Chance %", yPos, 0, 100, function(value)
+        Config.SilentAimHitChance = value
+    end, Config.SilentAimHitChance)
+    yPos = yPos + 65
+    
+    createKeybind(parent, "Aim Keybind", yPos, function(key)
+        Config.SilentAimKeybind = key
+    end, Config.SilentAimKeybind)
+    yPos = yPos + 65
+    
+    parent.CanvasSize = UDim2.new(0, 0, 0, yPos + 10)
+end
+
+function createVisualTab(parent)
+    local yPos = 0
+    
+    createSection(parent, "ESP Settings", yPos)
+    yPos = yPos + 40
+    
+    createToggle(parent, "ESP Enabled", yPos, function(value)
+        Config.ESPEnabled = value
+        toggleESP(value)
+    end, Config.ESPEnabled)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Show Box", yPos, function(value)
+        Config.ShowBoxESP = value
+        updateESP()
+    end, Config.ShowBoxESP)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Show Tracer", yPos, function(value)
+        Config.ShowTracer = value
+        updateESP()
+    end, Config.ShowTracer)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Show Name", yPos, function(value)
+        Config.ShowName = value
+        updateESP()
+    end, Config.ShowName)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Show Distance", yPos, function(value)
+        Config.ShowDistance = value
+        updateESP()
+    end, Config.ShowDistance)
+    yPos = yPos + 45
+    
+    createColorPicker(parent, "ESP Color", yPos, function(color)
+        Config.ESPColor = color
+        updateESP()
+    end, Config.LineColor)
+    yPos = yPos + 65
+    
+    parent.CanvasSize = UDim2.new(0, 0, 0, yPos + 10)
+end
+
+function createMovementTab(parent)
+    local yPos = 0
+    
+    createSection(parent, "Movement Settings", yPos)
+    yPos = yPos + 40
+    
+    createToggle(parent, "Custom WalkSpeed", yPos, function(value)
+        Config.WalkSpeedEnabled = value
+        updateWalkSpeed()
+    end, Config.WalkSpeedEnabled)
+    yPos = yPos + 45
+    
+    createSlider(parent, "WalkSpeed", yPos, 16, 200, function(value)
+        Config.WalkSpeed = value
+        updateWalkSpeed()
+    end, Config.WalkSpeed)
+    yPos = yPos + 65
+    
+    createToggle(parent, "Custom Jump Power", yPos, function(value)
+        Config.JumpPowerEnabled = value
+        updateJumpPower()
+    end, Config.JumpPowerEnabled)
+    yPos = yPos + 45
+    
+    createSlider(parent, "Jump Power", yPos, 50, 300, function(value)
+        Config.JumpPower = value
+        updateJumpPower()
+    end, Config.JumpPower)
+    yPos = yPos + 65
+    
+    createToggle(parent, "Fly Mode", yPos, function(value)
+        Config.FlyEnabled = value
+        toggleFly(value)
+    end, Config.FlyEnabled)
+    yPos = yPos + 45
+    
+    createSlider(parent, "Fly Speed", yPos, 10, 150, function(value)
+        Config.FlySpeed = value
+        if Config.FlyEnabled then
+            toggleFly(true)
+        end
+    end, Config.FlySpeed)
+    yPos = yPos + 65
+    
+    createToggle(parent, "Noclip", yPos, function(value)
+        Config.NoclipEnabled = value
+        toggleNoclip(value)
+    end, Config.NoclipEnabled)
+    yPos = yPos + 45
+    
+    createToggle(parent, "Infinite Jump", yPos, function(value)
+        Config.InfiniteJump = value
+        toggleInfiniteJump(value)
+    end, Config.InfiniteJump)
+    yPos = yPos + 45
+    
+    parent.CanvasSize = UDim2.new(0, 0, 0, yPos + 10)
+end
+
+function createUtilityTab(parent)
+    local yPos = 0
+    
+    createSection(parent, "Utility Settings", yPos)
+    yPos = yPos + 40
+    
+    createToggle(parent, "Auto Clicker", yPos, function(value)
+        Config.AutoClickerEnabled = value
+        toggleAutoClicker(value)
+    end, Config.AutoClickerEnabled)
+    yPos = yPos + 45
+    
+    createSlider(parent, "Clicks Per Second", yPos, 1, 50, function(value)
+        Config.ClickSpeed = value
+        if Config.AutoClickerEnabled then
+            toggleAutoClicker(true)
+        end
+    end, Config.ClickSpeed)
+    yPos = yPos + 65
+    
+    createButton(parent, "Reset All Settings", yPos, function()
+        resetAllSettings()
+    end)
+    yPos = yPos + 50
+    
+    createButton(parent, "Save Configuration", yPos, function()
+        saveConfig()
+    end)
+    yPos = yPos + 50
+    
+    createButton(parent, "Load Configuration", yPos, function()
+        loadConfig()
+    end)
+    yPos = yPos + 50
+    
+    parent.CanvasSize = UDim2.new(0, 0, 0, yPos + 10)
+end
+
+-- =============================================
+-- GUI COMPONENT FUNCTIONS
+-- =============================================
+
+function createSection(parent, title, yPos)
+    local section = Instance.new("Frame")
+    section.Size = UDim2.new(1, 0, 0, 30)
+    section.Position = UDim2.new(0, 0, 0, yPos)
+    section.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    section.BorderSizePixel = 0
+    section.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 1, 0)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = title
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamBold
+    label.Parent = section
+end
+
+function createToggle(parent, label, yPos, callback, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 35)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7, 0, 1, 0)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0, 50, 0, 25)
+    toggle.Position = UDim2.new(1, -60, 0.5, -12)
+    toggle.BackgroundColor3 = default and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(100, 100, 100)
+    toggle.Text = default and "ON" or "OFF"
+    toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggle.TextScaled = true
+    toggle.Parent = container
+    
+    toggle.MouseButton1Click:Connect(function()
+        local newValue = not default
+        default = newValue
+        toggle.BackgroundColor3 = newValue and Color3.fromRGB(0, 200, 0) or Color3.fromRGB(100, 100, 100)
+        toggle.Text = newValue and "ON" or "OFF"
+        callback(newValue)
+    end)
+end
+
+function createSlider(parent, label, yPos, min, max, callback, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label .. ": " .. default
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local slider = Instance.new("Frame")
+    slider.Size = UDim2.new(1, -10, 0, 20)
+    slider.Position = UDim2.new(0, 5, 0, 25)
+    slider.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    slider.BorderSizePixel = 0
+    slider.Parent = container
+    
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    fill.Position = UDim2.new(0, 0, 0, 0)
+    fill.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    fill.BorderSizePixel = 0
+    fill.Parent = slider
+    
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(0, 10, 1, 0)
+    button.Position = UDim2.new((default - min) / (max - min), -5, 0, 0)
+    button.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = ""
+    button.Parent = slider
+    
+    local dragging = false
+    
+    button.MouseButton1Down:Connect(function()
+        dragging = true
+    end)
+    
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+    
+    game:GetService("UserInputService").InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local xPos = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
+            local value = math.floor(min + (max - min) * xPos)
+            
+            fill.Size = UDim2.new(xPos, 0, 1, 0)
+            button.Position = UDim2.new(xPos, -5, 0, 0)
+            label.Text = label.Text:gsub(": %d+", ": " .. value)
+            callback(value)
+        end
+    end)
+end
+
+function createInput(parent, label, yPos, callback)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(1, -10, 0, 25)
+    textBox.Position = UDim2.new(0, 5, 0, 25)
+    textBox.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    textBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+    textBox.PlaceholderText = "Enter names separated by commas..."
+    textBox.Text = ""
+    textBox.TextScaled = true
+    textBox.Parent = container
+    
+    textBox.FocusLost:Connect(function()
+        callback(textBox.Text)
+    end)
+end
+
+function createDropdown(parent, label, yPos, options, callback, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local dropdown = Instance.new("TextButton")
+    dropdown.Size = UDim2.new(1, -10, 0, 25)
+    dropdown.Position = UDim2.new(0, 5, 0, 25)
+    dropdown.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    dropdown.TextColor3 = Color3.fromRGB(255, 255, 255)
+    dropdown.Text = default
+    dropdown.TextScaled = true
+    dropdown.Parent = container
+    
+    local open = false
+    local optionFrames = {}
+    
+    dropdown.MouseButton1Click:Connect(function()
+        open = not open
+        
+        if open then
+            for i, option in ipairs(options) do
+                local optionBtn = Instance.new("TextButton")
+                optionBtn.Size = UDim2.new(1, -10, 0, 25)
+                optionBtn.Position = UDim2.new(0, 5, 0, 25 + (i * 25))
+                optionBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+                optionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                optionBtn.Text = option
+                optionBtn.TextScaled = true
+                optionBtn.Parent = container
+                optionBtn.ZIndex = 2
+                
+                optionBtn.MouseButton1Click:Connect(function()
+                    dropdown.Text = option
+                    callback(option)
+                    for _, frame in ipairs(optionFrames) do
+                        frame:Destroy()
+                    end
+                    open = false
+                end)
+                
+                table.insert(optionFrames, optionBtn)
+            end
+        else
+            for _, frame in ipairs(optionFrames) do
+                frame:Destroy()
+            end
+        end
+    end)
+end
+
+function createColorPicker(parent, label, yPos, callback, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local colorBox = Instance.new("TextButton")
+    colorBox.Size = UDim2.new(0, 50, 0, 25)
+    colorBox.Position = UDim2.new(1, -60, 0, 25)
+    colorBox.BackgroundColor3 = default
+    colorBox.Text = ""
+    colorBox.Parent = container
+    
+    colorBox.MouseButton1Click:Connect(function()
+        local colors = {
+            Color3.fromRGB(255, 0, 0),   -- Red
+            Color3.fromRGB(0, 255, 0),   -- Green
+            Color3.fromRGB(0, 0, 255),   -- Blue
+            Color3.fromRGB(255, 255, 0), -- Yellow
+            Color3.fromRGB(255, 0, 255), -- Magenta
+            Color3.fromRGB(0, 255, 255), -- Cyan
+            Color3.fromRGB(255, 255, 255) -- White
+        }
+        
+        local currentIndex = 1
+        for i, color in ipairs(colors) do
+            if color == default then
+                currentIndex = i
+                break
+            end
+        end
+        
+        local nextIndex = (currentIndex % #colors) + 1
+        local newColor = colors[nextIndex]
+        colorBox.BackgroundColor3 = newColor
+        callback(newColor)
+    end)
+end
+
+function createKeybind(parent, label, yPos, callback, default)
+    local container = Instance.new("Frame")
+    container.Size = UDim2.new(1, 0, 0, 55)
+    container.Position = UDim2.new(0, 0, 0, yPos)
+    container.BackgroundTransparency = 1
+    container.Parent = parent
+    
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 0, 20)
+    label.Position = UDim2.new(0, 5, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Text = label
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextScaled = true
+    label.Parent = container
+    
+    local keybind = Instance.new("TextButton")
+    keybind.Size = UDim2.new(0, 80, 0, 25)
+    keybind.Position = UDim2.new(1, -90, 0, 25)
+    keybind.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+    keybind.TextColor3 = Color3.fromRGB(255, 255, 255)
+    keybind.Text = default
+    keybind.TextScaled = true
+    keybind.Parent = container
+    
+    local listening = false
+    
+    keybind.MouseButton1Click:Connect(function()
+        listening = true
+        keybind.Text = "..."
+        keybind.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
+    end)
+    
+    UserInputService.InputBegan:Connect(function(input)
+        if listening and input.UserInputType == Enum.UserInputType.Keyboard then
+            local key = input.KeyCode.Name
+            keybind.Text = key
+            keybind.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+            callback(key)
+            listening = false
+        end
+    end)
+end
+
+function createButton(parent, label, yPos, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, -10, 0, 40)
+    button.Position = UDim2.new(0, 5, 0, yPos)
+    button.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+    button.TextColor3 = Color3.fromRGB(255, 255, 255)
+    button.Text = label
+    button.TextScaled = true
+    button.Font = Enum.Font.GothamBold
+    button.Parent = parent
+    
+    button.MouseButton1Click:Connect(function()
+        callback()
+    end)
+end
+
+-- =============================================
+-- CORE FUNCTIONALITY
+-- =============================================
+
+-- Target Line Functions
+function createFOVCircle()
+    if not Drawing then return end
+    
+    fovCircle = Drawing.new("Circle")
+    fovCircle.Visible = Config.FOVCircle
+    fovCircle.Radius = Config.FOVSize
+    fovCircle.Color = Color3.fromRGB(255, 255, 255)
+    fovCircle.Thickness = 2
+    fovCircle.Filled = false
+    fovCircle.Transparency = 0.5
+end
+
+function createTargetLine()
+    if not Drawing then return end
+    
+    targetLine = Drawing.new("Line")
+    targetLine.Visible = false
+    targetLine.Color = Config.LineColor
+    targetLine.Thickness = Config.LineThickness
+    targetLine.Transparency = 0.8
+end
+
+function updateFOVCircle()
+    if fovCircle then
+        fovCircle.Visible = Config.FOVCircle
+        fovCircle.Radius = Config.FOVSize
+    end
+end
+
+function updateTargetLine()
+    if targetLine then
+        targetLine.Color = Config.LineColor
+        targetLine.Thickness = Config.LineThickness
+    end
+end
+
+-- Silent Aim Functions
+function toggleSilentAim(enabled)
+    if enabled then
+        setupSilentAim()
+    else
+        if silentAimHook then
+            -- Restore original function
+            -- Note: This is simplified - in practice you'd need to store the original function
+        end
+    end
+end
+
+function setupSilentAim()
+    local mt = getrawmetatable(game)
+    local oldNamecall = mt.__namecall
+    
+    setreadonly(mt, false)
+    
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        
+        if Config.SilentAimEnabled and method == "FindPartOnRayWithIgnoreList" then
+            local target = findClosestTarget()
+            
+            if target and target.Character then
+                local targetPart = target.Character:FindFirstChild(Config.TargetPart)
+                if targetPart and math.random(1, 100) <= Config.SilentAimHitChance then
+                    local origin = Camera.CFrame.Position
+                    local direction = (targetPart.Position - origin).Unit * 1000
+                    args[1] = Ray.new(origin, direction)
+                end
+            end
+        end
+        
+        return oldNamecall(self, unpack(args))
+    end)
+    
+    setreadonly(mt, true)
+end
+
+-- Movement Functions
+function updateWalkSpeed()
+    if LocalPlayer and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            if Config.WalkSpeedEnabled then
+                humanoid.WalkSpeed = Config.WalkSpeed
+            else
+                humanoid.WalkSpeed = Config.OriginalWalkSpeed
+            end
+        end
+    end
+end
+
+function updateJumpPower()
+    if LocalPlayer and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if humanoid then
+            if Config.JumpPowerEnabled then
+                humanoid.JumpPower = Config.JumpPower
+            else
+                humanoid.JumpPower = Config.OriginalJumpPower
+            end
+        end
+    end
+end
+
+function toggleFly(enabled)
+    if enabled then
+        startFlying()
+    else
+        stopFlying()
+    end
+end
+
+function startFlying()
+    if not LocalPlayer.Character then return end
+    
+    local humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
+    local rootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    
+    if humanoid and rootPart then
+        humanoid.PlatformStand = true
+        
+        flyBodyVelocity = Instance.new("BodyVelocity")
+        flyBodyVelocity.Velocity = Vector3.new(0, 0, 0)
+        flyBodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+        flyBodyVelocity.Parent = rootPart
+        
+        table.insert(connections, RunService.Heartbeat:Connect(function()
+            if not flyBodyVelocity or not flyBodyVelocity.Parent then
+                return
+            end
+            
+            local camera = workspace.CurrentCamera
+            local moveDirection = Vector3.new(0, 0, 0)
+            
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then
+                moveDirection = moveDirection + camera.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.S) then
+                moveDirection = moveDirection - camera.CFrame.LookVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.A) then
+                moveDirection = moveDirection - camera.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.D) then
+                moveDirection = moveDirection + camera.CFrame.RightVector
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                moveDirection = moveDirection + Vector3.new(0, 1, 0)
+            end
+            if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then
+                moveDirection = moveDirection - Vector3.new(0, 
